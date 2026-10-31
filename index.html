@@ -1,121 +1,137 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0a0a0a" />
-    <title>Minecraft Terrain Planner</title>
-    <link rel="manifest" href="./manifest.json" />
-    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="description" content="A Minecraft-style 3D building and terrain planner.">
+    <title>Blockscape — Terrain Planner</title>
+    <link rel="manifest" href="./manifest.json">
+    <link rel="stylesheet" href="./styles.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+        }
+      }
+    </script>
   </head>
   <body>
-    <div id="app">
-      <div id="viewport">
-        <div class="top-hud">
-          <div class="hud-panel hud-panel-tools">
-            <div class="panel-header">Build Tools</div>
-            <div id="toolSelector" class="tool-selector">
-              <button class="tool-box active" data-tool="block" type="button">
-                <span class="tool-art cube"></span>
-                <span>Block</span>
-              </button>
-              <button class="tool-box" data-tool="wall" type="button">
-                <span class="tool-art wall"></span>
-                <span>Wall</span>
-              </button>
-              <button class="tool-box" data-tool="pillar" type="button">
-                <span class="tool-art pillar"></span>
-                <span>Pillar</span>
-              </button>
-              <button class="tool-box" data-tool="diagonal" type="button">
-                <span class="tool-art diagonal"></span>
-                <span>Diag</span>
-              </button>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Blockscape home">
+          <canvas id="brand-icon" width="36" height="36" aria-hidden="true"></canvas>
+          <span><strong>BLOCKSCAPE</strong><small>WORLD PLANNER</small></span>
+        </a>
+        <div class="topbar-actions">
+          <span id="save-status" class="save-status" role="status">Ready</span>
+          <button id="export-world" class="button button-quiet" type="button">Export</button>
+          <button id="import-world" class="button button-quiet" type="button">Import</button>
+          <input id="import-file" type="file" accept="application/json,.json" hidden>
+          <button id="build-menu-toggle" class="icon-button" type="button" aria-label="Close build menu" aria-expanded="true" aria-controls="build-panel">▤</button>
+          <button id="settings-toggle" class="icon-button" type="button" aria-label="Open settings" aria-expanded="false">⚙</button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="3D building workspace">
+        <div id="viewport" class="viewport">
+          <canvas id="world-canvas" aria-label="3D world. Click to capture mouse and look around."></canvas>
+          <div class="viewport-topline">
+            <span id="world-coordinates" class="coordinates">X 0 · Y 0 · Z 0</span>
+          </div>
+          <div class="viewport-hud">
+            <div id="selection-stack" class="selection-stack" aria-label="Tool selection"></div>
+            <div id="action-hints" class="action-hints" aria-label="Controller actions">
+              <span class="gamepad-hint"><kbd>LT</kbd><span>Break</span></span>
+              <span class="gamepad-hint"><kbd>RT</kbd><span>Place</span></span>
+              <span class="gamepad-hint"><kbd>Y</kbd><span>Color</span></span>
+              <span class="gamepad-hint"><kbd>X</kbd><span>Settings</span></span>
+              <span class="gamepad-hint"><kbd>LB</kbd><span>Texture</span></span>
+              <span class="keyboard-hint" hidden><kbd>M / Q</kbd><span>Break</span></span>
+              <span class="keyboard-hint" hidden><kbd>P / E</kbd><span>Place</span></span>
+              <span class="keyboard-hint" hidden><kbd>Y</kbd><span>Color</span></span>
+              <span class="keyboard-hint" hidden><kbd>X</kbd><span>Settings</span></span>
+              <span class="keyboard-hint" hidden><kbd>B</kbd><span>Menu</span></span>
+              <span class="keyboard-hint" hidden><kbd>T</kbd><span>Texture</span></span>
+              <span class="keyboard-hint" hidden><kbd>WASD</kbd><span>Fly</span></span>
+              <span class="keyboard-hint" hidden><kbd>I K O L</kbd><span>Look</span></span>
+            </div>
+            <div id="texture-gamepad-hint" class="texture-gamepad-hint" hidden>
+              <span class="gamepad-hint"><kbd>LB</kbd> EDIT <kbd>◀ ▶</kbd> SIZE <kbd>A</kbd> NOISE <kbd>B</kbd> APPLY</span>
+              <span class="keyboard-hint" hidden><kbd>T</kbd> EDIT <kbd>O / L</kbd> SIZE <kbd>I</kbd> NOISE <kbd>P</kbd> APPLY</span>
             </div>
           </div>
-
-          <div class="hud-panel hud-panel-hints">
-            <div class="panel-header">Controls</div>
-            <div id="inputHints" class="input-hints keyboard-mode"></div>
+          <div id="placement-status" class="placement-status" role="status" aria-live="polite">P / E: Select first base corner</div>
+          <div id="placement-dimensions" class="placement-dimensions" aria-live="polite" hidden></div>
+          <div class="crosshair" aria-hidden="true"><i></i></div>
+          <div id="hint" class="viewport-hint">
+            <span class="keyboard-hint" hidden>Click to look · <kbd>WASD</kbd> fly · <kbd>I K O L</kbd> look</span>
+            <span class="gamepad-hint" hidden><kbd>Left stick</kbd> fly · <kbd>Right stick</kbd> look</span>
           </div>
-        </div>
-
-        <div id="crosshair" aria-hidden="true"></div>
-        <div id="coords" class="coords-panel">X:0 Y:0 Z:0</div>
-      </div>
-
-      <aside id="buildMenu" class="build-menu open">
-        <div class="menu-header">
-          <h2>Build Menu</h2>
-          <button id="toggleMenuBtn" class="mini-button" type="button">Hide</button>
-        </div>
-
-        <div class="menu-section">
-          <label class="section-label">Tool</label>
-          <div id="toolList" class="menu-list">
-            <button class="menu-tool active" data-tool="block" type="button">Block</button>
-            <button class="menu-tool" data-tool="wall" type="button">Wall</button>
-            <button class="menu-tool" data-tool="pillar" type="button">Pillar</button>
-            <button class="menu-tool" data-tool="diagonal" type="button">Diagonal</button>
-            <button class="menu-tool" data-tool="circle" type="button">Circle</button>
-            <button class="menu-tool" data-tool="stair" type="button">Stair</button>
+          <div class="viewport-tools">
+            <button id="focus-player" class="round-tool" type="button" aria-label="Reset camera position" title="Reset camera">⌖</button>
+            <button id="toggle-grid" class="round-tool active" type="button" aria-label="Toggle grid" title="Toggle grid">▦</button>
           </div>
-        </div>
-
-        <div class="menu-section">
-          <label class="section-label" for="colorPicker">Color</label>
-          <div class="color-row">
-            <input id="colorPicker" type="color" value="#ff6f61" />
-            <span id="activeColorLabel" class="color-label">#FF6F61</span>
-          </div>
-          <div id="paletteSwatches" class="palette-swatches"></div>
-        </div>
-
-        <div class="menu-section">
-          <label class="section-label">Textures</label>
-          <button id="toggleTextureEditor" class="menu-button" type="button">Texture Editor</button>
-          <div id="textureEditor" class="texture-editor hidden">
-            <div class="texture-grid">
-              <label for="textureSize">Size</label>
-              <select id="textureSize">
-                <option value="1">1x1</option>
-                <option value="8">8x8</option>
-                <option value="16" selected>16x16</option>
-                <option value="32">32x32</option>
-              </select>
+          <section id="settings-panel" class="floating-panel settings-panel" aria-label="World settings" hidden>
+            <div class="panel-heading">
+              <div><span class="eyebrow">WORLD CONFIG</span><h2>Settings</h2></div>
+              <button class="icon-button panel-close" type="button" aria-label="Close settings">×</button>
             </div>
-            <div class="texture-actions">
-              <button id="toggleNoise" class="menu-button" type="button">Noise: Off</button>
-              <button id="applyTexture" class="menu-button primary" type="button">Apply</button>
+            <label class="setting-row" for="block-scale">
+              <span>Block scale <small id="block-scale-value">1.0×</small></span>
+              <input id="block-scale" type="range" min="0.5" max="2" step="0.1" value="1">
+            </label>
+            <label class="setting-row" for="grid-radius">
+              <span>Grid extent <small id="grid-radius-value">40 blocks</small></span>
+              <input id="grid-radius" type="range" min="10" max="100" step="5" value="40">
+            </label>
+            <label class="setting-row" for="air-distance">
+              <span>Air placement <small id="air-distance-value">4 blocks</small></span>
+              <input id="air-distance" type="range" min="2" max="5" step="0.5" value="4">
+            </label>
+            <button id="master-reset" class="button button-danger button-full" type="button">Reset world &amp; settings</button>
+          </section>
+          <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        <aside id="build-panel" class="side-panel" aria-label="Build menu">
+          <div class="side-heading">
+            <div><span class="eyebrow">BUILD MENU</span><h1>Toolbox</h1></div>
+            <button id="build-menu-close" class="icon-button panel-close" type="button" aria-label="Close build menu">×</button>
+          </div>
+          <nav id="category-list" class="category-list" aria-label="Tool categories"></nav>
+          <section class="tool-section">
+            <div class="section-title"><span>TOOLS</span><span id="tool-count">01</span></div>
+            <div id="tool-list" class="tool-list" role="listbox" aria-label="Building tools"></div>
+          </section>
+          <section class="palette-section">
+            <div class="section-title"><span>BLOCK COLOR</span><button id="palette-tab" class="text-button" type="button">EDIT</button></div>
+            <div id="palette-swatches" class="palette-swatches" aria-label="Block color palette"></div>
+            <div class="color-picker-row">
+              <label for="custom-color">Custom color</label>
+              <input id="custom-color" type="color" value="#d84646">
+              <button id="save-custom-color" class="text-button" type="button">SAVE</button>
             </div>
-          </div>
+          </section>
+          <section id="texture-section" class="texture-section" hidden>
+            <div class="section-title"><span>TEXTURE OPTIONS</span><button id="texture-close" class="text-button" type="button">CLOSE</button></div>
+            <div class="texture-controls">
+              <span>SIZE</span>
+              <div id="texture-size-options" class="texture-size-options" role="group" aria-label="Texture size">
+                <button class="texture-size-option active" type="button" data-size="1" aria-pressed="true">1×1</button>
+                <button class="texture-size-option" type="button" data-size="8" aria-pressed="false">8×8</button>
+                <button class="texture-size-option" type="button" data-size="16" aria-pressed="false">16×16</button>
+                <button class="texture-size-option" type="button" data-size="32" aria-pressed="false">32×32</button>
+              </div>
+            </div>
+            <button id="texture-noise" class="button button-quiet noise-toggle" type="button" aria-pressed="false">NOISE OFF <kbd>A</kbd></button>
+            <canvas id="texture-canvas" width="128" height="128" aria-label="Generated texture preview"></canvas>
+            <button id="texture-apply" class="button button-primary button-full" type="button">Apply texture <kbd>B</kbd></button>
+          </section>
+          <div class="controller-note"><span class="controller-icon">⌗</span><span><strong>Controller ready</strong><small>Connect an Xbox controller to build</small></span><i id="controller-indicator"></i></div>
+        </aside>
         </div>
+      </section>
 
-        <div class="menu-section">
-          <label class="section-label">Settings</label>
-          <div class="range-setting">
-            <label for="blockScale">Block Scale</label>
-            <input id="blockScale" type="range" min="0.5" max="2" step="0.1" value="1" />
-          </div>
-          <div class="range-setting">
-            <label for="gridRadius">Grid Radius</label>
-            <input id="gridRadius" type="range" min="8" max="96" step="1" value="32" />
-          </div>
-          <div class="range-setting">
-            <label for="airDistance">Air Placement</label>
-            <input id="airDistance" type="range" min="1" max="12" step="0.5" value="4" />
-          </div>
-          <div class="button-stack">
-            <button id="exportWorld" class="menu-button" type="button">Export JSON</button>
-            <button id="importWorld" class="menu-button" type="button">Import JSON</button>
-            <button id="resetWorld" class="menu-button danger" type="button">Master Reset</button>
-          </div>
-          <input id="importFile" type="file" accept="application/json" hidden />
-        </div>
-      </aside>
-    </div>
-
+    </main>
     <script type="module" src="./js/app.js"></script>
   </body>
 </html>

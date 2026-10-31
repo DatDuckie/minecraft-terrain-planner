@@ -1,19 +1,8 @@
-{
-  "name": "Minecraft Terrain Planner",
-  "short_name": "Terrain Planner",
-  "description": "3D building and terrain planning tool for block-based design.",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
-  "icons": [
-    {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ]
-}
-
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="20" fill="#101010"/>
+  <g stroke="#fff" stroke-opacity=".34" stroke-width="3" stroke-linejoin="round">
+    <path d="M96 27 157 60 96 94 35 60Z" fill="#45a85a"/>
+    <path d="M35 60 96 94v72l-61-34Z" fill="#d84646"/>
+    <path d="m96 94 61-34v72l-61 34Z" fill="#4188d2"/>
+  </g>
+</svg>

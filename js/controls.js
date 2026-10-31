@@ -1,151 +1,89 @@
 export class Controls {
-  constructor(app) {
-    this.app = app;
-    this.keys = {};
-    this.mouseDown = false;
+  constructor({ renderer, callbacks, indicator }) {
+    this.renderer = renderer;
+    this.callbacks = callbacks;
+    this.indicator = indicator;
+    this.input = { forward: 0, right: 0, vertical: 0, lookX: 0, lookY: 0 };
+    this.gamepadInput = { forward: 0, right: 0, vertical: 0, lookX: 0, lookY: 0 };
+    this.previousButtons = [];
+    this.lastGamepad = null;
+    this.activeInputMode = null;
   }
 
-  onKeyDown(event) {
-    this.keys[event.code] = true;
-
-    if (event.code === 'KeyB') {
-      this.app.toggleBuildMenu();
-    }
-
-    if (event.code === 'KeyT') {
-      const hidden = this.app.ui.textureEditor.classList.toggle('hidden');
-      this.app.ui.toggleTextureEditor.textContent = hidden ? 'Texture Editor' : 'Hide Texture Editor';
-    }
-
-    if (event.code === 'KeyP' || event.code === 'KeyE') {
-      this.app.builder.confirmSelection();
-    }
-
-    if (event.code === 'KeyM' || event.code === 'KeyQ') {
-      this.app.builder.breakAtTarget();
-    }
-
-    if (event.code === 'Escape' || event.code === 'Digit0' || event.code === 'Numpad0') {
-      this.app.builder.cancelSelection();
-    }
-
-    if (event.code === 'KeyI') {
-      this.app.state.settings.noise = !this.app.state.settings.noise;
-      this.app.ui.toggleNoise.textContent = `Noise: ${this.app.state.settings.noise ? 'On' : 'Off'}`;
-    }
-
-    if (event.code === 'KeyO' || event.code === 'KeyL') {
-      const options = [1, 8, 16, 32];
-      const current = Number(this.app.state.settings.textureSize || 16);
-      const idx = options.indexOf(current);
-      const next = options[(idx + 1) % options.length];
-      this.app.state.settings.textureSize = next;
-      this.app.ui.textureSize.value = String(next);
-    }
+  setInputMode(mode) {
+    if (this.activeInputMode === mode) return;
+    this.activeInputMode = mode;
+    this.callbacks.inputMode(mode);
   }
 
-  onKeyUp(event) {
-    this.keys[event.code] = false;
+  pressed(gamepad, index) {
+    return Boolean(gamepad.buttons[index] && (gamepad.buttons[index].pressed || gamepad.buttons[index].value > 0.55));
   }
 
-  onMouseMove(event) {
-    if (!this.mouseDown) return;
-    this.app.renderer.cameraYaw -= event.movementX * 0.005;
-    this.app.renderer.cameraPitch = Math.max(-1.4, Math.min(1.4, this.app.renderer.cameraPitch - event.movementY * 0.004));
+  edge(gamepad, index) {
+    const value = this.pressed(gamepad, index);
+    const rising = value && !this.previousButtons[index];
+    this.previousButtons[index] = value;
+    return rising;
   }
 
-  onMouseDown(event) {
-    if (event.button === 0) {
-      this.mouseDown = true;
-      this.app.builder.confirmSelection();
+  update() {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepad = [...gamepads].find(pad => pad && pad.connected);
+    if (!gamepad) {
+      this.setInputMode("keyboard");
+      this.lastGamepad = null;
+      this.previousButtons = [];
+      this.indicator?.classList.remove("connected");
+      this.gamepadInput = { forward: 0, right: 0, vertical: 0, lookX: 0, lookY: 0 };
+      return this.combineInput();
     }
+    this.setInputMode("gamepad");
+    this.lastGamepad = gamepad;
+    this.indicator?.classList.add("connected");
+    const deadzone = value => Math.abs(value || 0) < 0.16 ? 0 : value;
+    const axes = gamepad.axes || [];
+    this.gamepadInput.right = deadzone(axes[0]);
+    this.gamepadInput.forward = -deadzone(axes[1]);
+    this.gamepadInput.lookX = deadzone(axes[2]);
+    this.gamepadInput.lookY = deadzone(axes[3]);
+    const textureEditorOpen = this.callbacks.textureEditorOpen();
+    const placementPending = this.callbacks.placementPending();
+    this.gamepadInput.vertical =
+      (this.pressed(gamepad, 0) && !textureEditorOpen ? 1 : 0) -
+      (this.pressed(gamepad, 1) && !textureEditorOpen && !placementPending ? 1 : 0);
+
+    if (this.edge(gamepad, 14)) {
+      if (textureEditorOpen) this.callbacks.textureSize(-1);
+      else this.callbacks.category(-1);
+    }
+    if (this.edge(gamepad, 15)) {
+      if (textureEditorOpen) this.callbacks.textureSize(1);
+      else this.callbacks.category(1);
+    }
+    if (this.edge(gamepad, 12)) this.callbacks.tool(-1);
+    if (this.edge(gamepad, 13)) this.callbacks.tool(1);
+    if (this.edge(gamepad, 6)) this.callbacks.breakBlock();
+    if (this.edge(gamepad, 7)) this.callbacks.placeBlock();
+    if (this.edge(gamepad, 0) && textureEditorOpen) this.callbacks.toggleTextureNoise();
+    if (this.edge(gamepad, 1)) {
+      if (textureEditorOpen) this.callbacks.applyTexture();
+      else if (this.callbacks.placementPending()) this.callbacks.cancelPlacement();
+    }
+    if (this.edge(gamepad, 3)) this.callbacks.cycleColor();
+    if (this.edge(gamepad, 2)) this.callbacks.settings();
+    if (this.edge(gamepad, 4)) this.callbacks.textureEditor();
+    if (this.edge(gamepad, 8)) this.callbacks.buildMenu();
+    return this.combineInput();
   }
 
-  update(dt) {
-    const renderer = this.app.renderer;
-    const move = { x: 0, y: 0, z: 0 };
-
-    if (this.keys.KeyW) move.z += 1;
-    if (this.keys.KeyS) move.z -= 1;
-    if (this.keys.KeyA) move.x -= 1;
-    if (this.keys.KeyD) move.x += 1;
-    if (this.keys.Space) move.y += 1;
-    if (this.keys.ShiftLeft || this.keys.ShiftRight) move.y -= 1;
-
-    if (this.keys.KeyI) renderer.cameraPitch += 0.03;
-    if (this.keys.KeyK) renderer.cameraPitch -= 0.03;
-    if (this.keys.KeyL) renderer.cameraYaw += 0.03;
-    if (this.keys.KeyO) renderer.cameraYaw -= 0.03;
-
-    const gamepad = navigator.getGamepads ? navigator.getGamepads()[0] : null;
-    if (gamepad) {
-      this.app.state.controllerConnected = true;
-      this.app.updateControlHints();
-
-      const [lx, ly] = gamepad.axes;
-      move.x += lx;
-      move.z -= ly;
-
-      if (gamepad.buttons[5]?.pressed) {
-        this.app.builder.breakAtTarget();
-      }
-
-      if (gamepad.buttons[7]?.pressed) {
-        this.app.toggleBuildMenu();
-      }
-
-      if (gamepad.buttons[0]?.pressed) {
-        this.app.builder.confirmSelection();
-      }
-
-      if (gamepad.buttons[1]?.pressed) {
-        this.app.builder.cancelSelection();
-      }
-
-      renderer.cameraYaw += (gamepad.axes[2] || 0) * 0.05;
-      renderer.cameraPitch = Math.max(-1.4, Math.min(1.4, renderer.cameraPitch + (gamepad.axes[3] || 0) * 0.045));
-    } else {
-      this.app.state.controllerConnected = false;
-      this.app.updateControlHints();
+  combineInput() {
+    const clamp = value => Math.max(-1, Math.min(1, value));
+    for (const axis of ["forward", "right", "vertical"]) {
+      this.input[axis] = clamp(this.gamepadInput[axis]);
     }
-
-    const forward = new THREE.Vector3(
-      Math.sin(renderer.cameraYaw) * Math.cos(renderer.cameraPitch),
-      Math.sin(renderer.cameraPitch),
-      Math.cos(renderer.cameraYaw) * Math.cos(renderer.cameraPitch)
-    ).normalize();
-
-    const right = new THREE.Vector3(Math.cos(renderer.cameraYaw), 0, -Math.sin(renderer.cameraYaw)).normalize();
-    const up = new THREE.Vector3(0, 1, 0);
-    const velo = new THREE.Vector3();
-    velo.addScaledVector(forward, move.z * dt * 8);
-    velo.addScaledVector(right, move.x * dt * 8);
-    velo.addScaledVector(up, move.y * dt * 8);
-    renderer.camera.position.add(velo);
-
-    if (this.keys.KeyP || this.keys.KeyE) {
-      this.app.builder.confirmSelection();
-      this.keys.KeyP = false;
-      this.keys.KeyE = false;
-    }
-
-    if (this.keys.KeyM || this.keys.KeyQ) {
-      this.app.builder.breakAtTarget();
-      this.keys.KeyM = false;
-      this.keys.KeyQ = false;
-    }
-  }
-
-  getMoveVector() {
-    const result = { x: 0, y: 0, z: 0 };
-
-    if (this.keys.KeyW) result.z += 1;
-    if (this.keys.KeyS) result.z -= 1;
-    if (this.keys.KeyA) result.x -= 1;
-    if (this.keys.KeyD) result.x += 1;
-    if (this.keys.Space) result.y += 1;
-    if (this.keys.ShiftLeft || this.keys.ShiftRight) result.y -= 1;
-
-    return result;
+    this.input.lookX = this.gamepadInput.lookX;
+    this.input.lookY = this.gamepadInput.lookY;
+    return this.input;
   }
 }
