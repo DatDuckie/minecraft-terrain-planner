@@ -1,0 +1,19 @@
+{
+  "name": "Minecraft Terrain Planner",
+  "short_name": "Terrain Planner",
+  "description": "3D building and terrain planning tool for block-based design.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

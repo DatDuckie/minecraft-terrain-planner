@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <title>Minecraft Terrain Planner</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="viewport">
+        <div class="top-hud">
+          <div class="hud-panel hud-panel-tools">
+            <div class="panel-header">Build Tools</div>
+            <div id="toolSelector" class="tool-selector">
+              <button class="tool-box active" data-tool="block" type="button">
+                <span class="tool-art cube"></span>
+                <span>Block</span>
+              </button>
+              <button class="tool-box" data-tool="wall" type="button">
+                <span class="tool-art wall"></span>
+                <span>Wall</span>
+              </button>
+              <button class="tool-box" data-tool="pillar" type="button">
+                <span class="tool-art pillar"></span>
+                <span>Pillar</span>
+              </button>
+              <button class="tool-box" data-tool="diagonal" type="button">
+                <span class="tool-art diagonal"></span>
+                <span>Diag</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="hud-panel hud-panel-hints">
+            <div class="panel-header">Controls</div>
+            <div id="inputHints" class="input-hints keyboard-mode">
+              <div class="hint-row"><span class="hint-key">WASD</span><span>Fly</span></div>
+              <div class="hint-row"><span class="hint-key">I/K/O/L</span><span>Look</span></div>
+              <div class="hint-row"><span class="hint-key">P / E</span><span>Place</span></div>
+              <div class="hint-row"><span class="hint-key">M / Q</span><span>Break</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="crosshair" aria-hidden="true"></div>
+        <div id="coords" class="coords-panel">X:0 Y:0 Z:0</div>
+      </div>
+
+      <aside id="buildMenu" class="build-menu open">
+        <div class="menu-header">
+          <h2>Build Menu</h2>
+          <button id="toggleMenuBtn" class="mini-button" type="button">Hide</button>
+        </div>
+
+        <div class="menu-section">
+          <label class="section-label">Tool</label>
+          <div id="toolList" class="menu-list">
+            <button class="menu-tool active" data-tool="block" type="button">Block</button>
+            <button class="menu-tool" data-tool="wall" type="button">Wall</button>
+            <button class="menu-tool" data-tool="pillar" type="button">Pillar</button>
+            <button class="menu-tool" data-tool="diagonal" type="button">Diagonal</button>
+            <button class="menu-tool" data-tool="circle" type="button">Circle</button>
+            <button class="menu-tool" data-tool="stair" type="button">Stair</button>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <label class="section-label" for="colorPicker">Color</label>
+          <div class="color-row">
+            <input id="colorPicker" type="color" value="#ff6f61" />
+            <span id="activeColorLabel" class="color-label">#FF6F61</span>
+          </div>
+          <div id="paletteSwatches" class="palette-swatches"></div>
+        </div>
+
+        <div class="menu-section">
+          <label class="section-label">Textures</label>
+          <button id="toggleTextureEditor" class="menu-button" type="button">Texture Editor</button>
+          <div id="textureEditor" class="texture-editor hidden">
+            <div class="texture-grid">
+              <label for="textureSize">Size</label>
+              <select id="textureSize">
+                <option value="1">1x1</option>
+                <option value="8">8x8</option>
+                <option value="16" selected>16x16</option>
+                <option value="32">32x32</option>
+              </select>
+            </div>
+            <div class="texture-actions">
+              <button id="toggleNoise" class="menu-button" type="button">Noise: Off</button>
+              <button id="applyTexture" class="menu-button primary" type="button">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <label class="section-label">Settings</label>
+          <div class="range-setting">
+            <label for="blockScale">Block Scale</label>
+            <input id="blockScale" type="range" min="0.5" max="2" step="0.1" value="1" />
+          </div>
+          <div class="range-setting">
+            <label for="gridRadius">Grid Radius</label>
+            <input id="gridRadius" type="range" min="8" max="96" step="1" value="32" />
+          </div>
+          <div class="range-setting">
+            <label for="airDistance">Air Placement</label>
+            <input id="airDistance" type="range" min="1" max="12" step="0.5" value="4" />
+          </div>
+          <div class="button-stack">
+            <button id="exportWorld" class="menu-button" type="button">Export JSON</button>
+            <button id="importWorld" class="menu-button" type="button">Import JSON</button>
+            <button id="resetWorld" class="menu-button danger" type="button">Master Reset</button>
+          </div>
+          <input id="importFile" type="file" accept="application/json" hidden />
+        </div>
+      </aside>
+    </div>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
