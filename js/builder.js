@@ -1,139 +1,229 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-
-export class TerrainRenderer {
+export class Builder {
   constructor(app) {
     this.app = app;
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color('#0b1015');
-
-    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 2000);
-    this.camera.position.set(12, 8, 12);
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-
-    const viewport = document.getElementById('viewport');
-    viewport.appendChild(this.renderer.domElement);
-
-    this.gridRadius = this.app.state.settings.gridRadius;
-    this.grid = new THREE.GridHelper(this.gridRadius * 2, this.gridRadius * 2, '#778592', '#2d3640');
-    this.grid.position.y = -0.5;
-    this.scene.add(this.grid);
-
-    const baseGround = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.gridRadius * 4, this.gridRadius * 4),
-      new THREE.MeshStandardMaterial({ color: '#202832', side: THREE.DoubleSide })
-    );
-    baseGround.rotation.x = -Math.PI / 2;
-    baseGround.position.y = -0.6;
-    this.scene.add(baseGround);
-
-    const hemi = new THREE.HemisphereLight('#cad9ea', '#0d1118', 0.85);
-    const sun = new THREE.DirectionalLight('#ffffff', 1.1);
-    sun.position.set(18, 26, 16);
-    this.scene.add(hemi, sun);
-
-    this.raycaster = new THREE.Raycaster();
-    this.mouse = new THREE.Vector2(0, 0);
-    this.pointerTarget = new THREE.Vector3();
-
-    this.cameraYaw = -0.85;
-    this.cameraPitch = -0.65;
-    this.cameraVelocity = new THREE.Vector3();
-    this.cameraLookTarget = new THREE.Vector3(0, 0, 0);
+    this.world = new Map();
+    this.previewGroup = new THREE.Group();
+    this.app.renderer.scene.add(this.previewGroup);
+    this.selection = null;
+    this.activeTool = 'block';
   }
 
-  setup() {
-    this.resize();
+  getWorldMeshes() {
+    return Array.from(this.world.values()).map((entry) => entry.mesh);
   }
 
-  resize() {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  setTool(tool) {
+    this.activeTool = tool;
+    this.selection = null;
+    this.clearPreview();
   }
 
-  updateBlockScale() {
-    const blockScale = this.app.state.settings.blockScale;
-    this.app.builder?.syncBlockScale(blockScale);
+  updateBlockScale(scale) {
+    this.getWorldMeshes().forEach((mesh) => {
+      mesh.scale.setScalar(scale);
+    });
   }
 
-  updateGridRadius(value) {
-    this.gridRadius = value;
-    this.scene.remove(this.grid);
-    this.grid = new THREE.GridHelper(value * 2, value * 2, '#778592', '#2d3640');
-    this.grid.position.y = -0.5;
-    this.scene.add(this.grid);
+  updateFillColor(color) {
+    this.app.state.activeColor = color;
   }
 
-  update(dt) {
-    const { camera } = this;
-    const viewDir = new THREE.Vector3(Math.sin(this.cameraYaw), 0, Math.cos(this.cameraYaw));
-    const rightDir = new THREE.Vector3(Math.cos(this.cameraYaw), 0, -Math.sin(this.cameraYaw));
-    const move = new THREE.Vector3();
-
-    if (this.app.controls) {
-      const input = this.app.controls.getMoveVector();
-      move.addScaledVector(viewDir, input.z);
-      move.addScaledVector(rightDir, input.x);
-      move.y = input.y;
-    }
-
-    if (move.lengthSq() > 0) {
-      move.normalize();
-      camera.position.addScaledVector(move, 9 * dt);
-    }
-
-    const lookTarget = new THREE.Vector3(
-      camera.position.x + Math.sin(this.cameraYaw) * Math.cos(this.cameraPitch),
-      camera.position.y + Math.sin(this.cameraPitch),
-      camera.position.z + Math.cos(this.cameraYaw) * Math.cos(this.cameraPitch)
-    );
-
-    camera.lookAt(lookTarget);
-
-    this.raycastTarget();
-    this.renderer.render(this.scene, camera);
+  roundVectorToCell(point) {
+    return {
+      x: Math.floor(point.x),
+      y: Math.floor(point.y),
+      z: Math.floor(point.z)
+    };
   }
 
-  raycastTarget() {
-    const center = new THREE.Vector2(0, 0);
-    this.raycaster.setFromCamera(center, this.camera);
-    const intersection = this.raycaster.intersectObjects(this.app.builder?.worldGroup?.children || [], true);
+  clearPreview() {
+    this.previewGroup.clear();
+  }
 
-    let target = null;
-    if (intersection.length > 0) {
-      const hit = intersection[0];
-      target = hit.point.clone();
-      const normal = hit.face.normal.clone();
-      target.addScaledVector(normal, 0.5);
-      this.pointerTarget.copy(target);
+  createPreviewMesh(color = '#ff4d4d', wireframe = false) {
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: '#260b0b',
+      transparent: true,
+      opacity: wireframe ? 0.9 : 0.75,
+      wireframe
+    });
 
-      const gridPos = new THREE.Vector3(
-        Math.round(target.x - 0.5),
-        Math.round(target.y - 0.5),
-        Math.round(target.z - 0.5)
-      );
-      this.app.setCoords(gridPos.x, gridPos.y, gridPos.z);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.96, 0.96), material);
+    return mesh;
+  }
+
+  updatePreview() {
+    this.clearPreview();
+
+    const target = this.app.renderer.getInteractionTarget();
+    const cell = this.roundVectorToCell(target);
+
+    if (!this.selection) {
+      const mesh = this.createPreviewMesh('#ff4d4d', false);
+      mesh.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
+      this.previewGroup.add(mesh);
       return;
     }
 
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    const point = new THREE.Vector3();
-    this.raycaster.ray.intersectPlane(plane, point);
-    this.pointerTarget.copy(point);
+    const start = this.selection.start;
+    const end = this.selection.end;
+    const minX = Math.min(start.x, end.x), maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y), maxY = Math.max(start.y, end.y);
+    const minZ = Math.min(start.z, end.z), maxZ = Math.max(start.z, end.z);
 
-    const airTarget = this.pointerTarget.clone();
-    const airDistance = this.app.state.settings.airPlacementDistance || 4;
-    const offset = new THREE.Vector3(Math.sin(this.cameraYaw), 0, Math.cos(this.cameraYaw)).multiplyScalar(airDistance);
-    airTarget.add(offset);
-
-    this.app.setCoords(airTarget.x, airTarget.y, airTarget.z);
+    const outlineMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1),
+      new THREE.MeshStandardMaterial({
+        color: '#ff4d4d',
+        wireframe: true,
+        transparent: true,
+        opacity: 0.9,
+        emissive: '#3a0b0b'
+      })
+    );
+    outlineMesh.position.set((minX + maxX) / 2 + 0.5, (minY + maxY) / 2 + 0.5, (minZ + maxZ) / 2 + 0.5);
+    this.previewGroup.add(outlineMesh);
   }
 
-  getInteractionTarget() {
-    return this.pointerTarget.clone();
+  beginSelection() {
+    const target = this.app.renderer.getInteractionTarget();
+    const cell = this.roundVectorToCell(target);
+    this.selection = { start: cell, end: cell };
+  }
+
+  updateSelection() {
+    const target = this.app.renderer.getInteractionTarget();
+    const cell = this.roundVectorToCell(target);
+    if (!this.selection) {
+      this.selection = { start: cell, end: cell };
+    } else {
+      this.selection.end = cell;
+    }
+  }
+
+  cancelSelection() {
+    this.selection = null;
+    this.clearPreview();
+  }
+
+  confirmSelection() {
+    if (!this.selection) {
+      this.beginSelection();
+      return;
+    }
+
+    const { start, end } = this.selection;
+    this.generateShape(start, end, this.activeTool);
+    this.selection = null;
+    this.clearPreview();
+  }
+
+  generateShape(start, end, tool) {
+    const minX = Math.min(start.x, end.x), maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y), maxY = Math.max(start.y, end.y);
+    const minZ = Math.min(start.z, end.z), maxZ = Math.max(start.z, end.z);
+
+    switch (tool) {
+      case 'block':
+        this.placeBlock(end.x, end.y, end.z);
+        break;
+      case 'wall':
+        for (let x = minX; x <= maxX; x++) {
+          for (let y = minY; y <= maxY; y++) {
+            for (let z = minZ; z <= maxZ; z++) {
+              if (x === minX || x === maxX || y === minY || y === maxY || z === minZ || z === maxZ) {
+                this.placeBlock(x, y, z);
+              }
+            }
+          }
+        }
+        break;
+      case 'pillar':
+        for (let y = minY; y <= maxY; y++) {
+          this.placeBlock(end.x, y, end.z);
+        }
+        break;
+      case 'diagonal': {
+        const dx = Math.abs(end.x - start.x);
+        const dz = Math.abs(end.z - start.z);
+        const steps = Math.max(dx, dz, 1);
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const x = Math.round(start.x + (end.x - start.x) * t);
+          const z = Math.round(start.z + (end.z - start.z) * t);
+          this.placeBlock(x, start.y, z);
+        }
+        break;
+      }
+      case 'circle':
+        for (let x = minX; x <= maxX; x++) {
+          for (let z = minZ; z <= maxZ; z++) {
+            const dx = x - ((minX + maxX) / 2);
+            const dz = z - ((minZ + maxZ) / 2);
+            if (dx * dx + dz * dz <= Math.max(1, Math.max(maxX - minX, maxZ - minZ)) ** 2) {
+              for (let y = minY; y <= maxY; y++) this.placeBlock(x, y, z);
+            }
+          }
+        }
+        break;
+      case 'stair':
+        for (let i = 0; i <= Math.max(1, Math.abs(end.y - start.y)); i++) {
+          const x = start.x + i;
+          const z = start.z + i;
+          this.placeBlock(x, start.y + i, z);
+        }
+        break;
+      default:
+        this.placeBlock(end.x, end.y, end.z);
+    }
+  }
+
+  placeBlock(x, y, z) {
+    const key = `${x},${y},${z}`;
+    if (this.world.has(key)) return;
+
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({
+        color: this.app.state.activeColor,
+        emissive: this.app.state.activeColor,
+        roughness: 0.8,
+        metalness: 0.05
+      })
+    );
+
+    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.app.renderer.scene.add(mesh);
+    this.world.set(key, { x, y, z, color: this.app.state.activeColor, mesh });
+  }
+
+  removeBlock(x, y, z) {
+    const key = `${x},${y},${z}`;
+    const entry = this.world.get(key);
+    if (!entry) return;
+    this.app.renderer.scene.remove(entry.mesh);
+    this.world.delete(key);
+  }
+
+  breakAtTarget() {
+    const target = this.app.renderer.getInteractionTarget();
+    const cell = this.roundVectorToCell(target);
+    this.removeBlock(cell.x, cell.y, cell.z);
+  }
+
+  exportWorld() {
+    return Array.from(this.world.values()).map(({ x, y, z, color }) => ({ x, y, z, color }));
+  }
+
+  loadWorld(worldData) {
+    if (!Array.isArray(worldData)) return;
+    worldData.forEach((block) => {
+      if (block && Number.isFinite(block.x) && Number.isFinite(block.y) && Number.isFinite(block.z)) {
+        this.placeBlock(block.x, block.y, block.z);
+      }
+    });
   }
 }
-

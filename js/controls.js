@@ -1,263 +1,151 @@
-export class Builder {
+export class Controls {
   constructor(app) {
     this.app = app;
-    this.world = new Map();
-    this.worldGroup = null;
-    this.previewGroup = null;
-    this.activeTool = 'block';
-    this.currentSelection = null;
-    this.previewMesh = null;
-
-    this.createWorldGroup();
-    this.createPreviewGroup();
+    this.keys = {};
+    this.mouseDown = false;
   }
 
-  createWorldGroup() {
-    this.worldGroup = document.createElement('div');
-    this.worldGroup.style.display = 'none';
-    this.app.renderer.scene.add(this.worldGroup);
-  }
+  onKeyDown(event) {
+    this.keys[event.code] = true;
 
-  createPreviewGroup() {
-    this.previewGroup = new THREE.Group();
-    this.app.renderer.scene.add(this.previewGroup);
-  }
-
-  setTool(tool) {
-    this.activeTool = tool;
-    this.currentSelection = null;
-    this.clearPreview();
-  }
-
-  syncBlockScale(scale) {
-    this.worldGroup?.traverse((child) => {
-      if (child.isMesh) {
-        child.scale.setScalar(scale);
-      }
-    });
-  }
-
-  updateFillColor(color) {
-    this.app.state.activeColor = color;
-  }
-
-  applyTextureToSelection() {
-    if (!this.currentSelection) return;
-    const size = this.app.state.settings.textureSize;
-    const noise = this.app.state.settings.noise;
-    this.currentSelection.forEach((key) => {
-      const block = this.world.get(key);
-      if (block) {
-        block.texture = { size, noise };
-      }
-    });
-  }
-
-  updatePreview(dt) {
-    if (!this.currentSelection) {
-      this.drawActiveCellPreview();
-      return;
+    if (event.code === 'KeyB') {
+      this.app.toggleBuildMenu();
     }
 
-    this.drawSelectionPreview();
+    if (event.code === 'KeyT') {
+      const hidden = this.app.ui.textureEditor.classList.toggle('hidden');
+      this.app.ui.toggleTextureEditor.textContent = hidden ? 'Texture Editor' : 'Hide Texture Editor';
+    }
+
+    if (event.code === 'KeyP' || event.code === 'KeyE') {
+      this.app.builder.confirmSelection();
+    }
+
+    if (event.code === 'KeyM' || event.code === 'KeyQ') {
+      this.app.builder.breakAtTarget();
+    }
+
+    if (event.code === 'Escape' || event.code === 'Digit0' || event.code === 'Numpad0') {
+      this.app.builder.cancelSelection();
+    }
+
+    if (event.code === 'KeyI') {
+      this.app.state.settings.noise = !this.app.state.settings.noise;
+      this.app.ui.toggleNoise.textContent = `Noise: ${this.app.state.settings.noise ? 'On' : 'Off'}`;
+    }
+
+    if (event.code === 'KeyO' || event.code === 'KeyL') {
+      const options = [1, 8, 16, 32];
+      const current = Number(this.app.state.settings.textureSize || 16);
+      const idx = options.indexOf(current);
+      const next = options[(idx + 1) % options.length];
+      this.app.state.settings.textureSize = next;
+      this.app.ui.textureSize.value = String(next);
+    }
   }
 
-  clearPreview() {
-    this.previewGroup.clear();
-    this.previewMesh = null;
+  onKeyUp(event) {
+    this.keys[event.code] = false;
   }
 
-  drawActiveCellPreview() {
-    this.clearPreview();
-
-    const target = this.app.renderer.getInteractionTarget();
-    const cell = this.roundVectorToCell(target);
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.96, 0.96, 0.96),
-      new THREE.MeshStandardMaterial({
-        color: '#ff4d4d',
-        emissive: '#3d0d0d',
-        transparent: true,
-        opacity: 0.76,
-      })
-    );
-
-    mesh.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
-    this.previewGroup.add(mesh);
-    this.previewMesh = mesh;
+  onMouseMove(event) {
+    if (!this.mouseDown) return;
+    this.app.renderer.cameraYaw -= event.movementX * 0.005;
+    this.app.renderer.cameraPitch = Math.max(-1.4, Math.min(1.4, this.app.renderer.cameraPitch - event.movementY * 0.004));
   }
 
-  drawSelectionPreview() {
-    this.clearPreview();
-    const { start, end } = this.currentSelection;
-    const minX = Math.min(start.x, end.x), maxX = Math.max(start.x, end.x);
-    const minY = Math.min(start.y, end.y), maxY = Math.max(start.y, end.y);
-    const minZ = Math.min(start.z, end.z), maxZ = Math.max(start.z, end.z);
-
-    const outline = new THREE.Mesh(
-      new THREE.BoxGeometry(maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1),
-      new THREE.MeshStandardMaterial({
-        color: '#ff4d4d',
-        wireframe: true,
-        transparent: true,
-        opacity: 0.9,
-      })
-    );
-    outline.position.set((minX + maxX) / 2 + 0.5, (minY + maxY) / 2 + 0.5, (minZ + maxZ) / 2 + 0.5);
-    this.previewGroup.add(outline);
+  onMouseDown(event) {
+    if (event.button === 0) {
+      this.mouseDown = true;
+      this.app.builder.confirmSelection();
+    }
   }
 
-  roundVectorToCell(point) {
-    return {
-      x: Math.floor(point.x),
-      y: Math.floor(point.y),
-      z: Math.floor(point.z),
-    };
-  }
+  update(dt) {
+    const renderer = this.app.renderer;
+    const move = { x: 0, y: 0, z: 0 };
 
-  setSelectionFromCurrentTarget() {
-    const target = this.app.renderer.getInteractionTarget();
-    const cell = this.roundVectorToCell(target);
-    if (!this.currentSelection) {
-      this.currentSelection = { start: cell, end: cell };
+    if (this.keys.KeyW) move.z += 1;
+    if (this.keys.KeyS) move.z -= 1;
+    if (this.keys.KeyA) move.x -= 1;
+    if (this.keys.KeyD) move.x += 1;
+    if (this.keys.Space) move.y += 1;
+    if (this.keys.ShiftLeft || this.keys.ShiftRight) move.y -= 1;
+
+    if (this.keys.KeyI) renderer.cameraPitch += 0.03;
+    if (this.keys.KeyK) renderer.cameraPitch -= 0.03;
+    if (this.keys.KeyL) renderer.cameraYaw += 0.03;
+    if (this.keys.KeyO) renderer.cameraYaw -= 0.03;
+
+    const gamepad = navigator.getGamepads ? navigator.getGamepads()[0] : null;
+    if (gamepad) {
+      this.app.state.controllerConnected = true;
+      this.app.updateControlHints();
+
+      const [lx, ly] = gamepad.axes;
+      move.x += lx;
+      move.z -= ly;
+
+      if (gamepad.buttons[5]?.pressed) {
+        this.app.builder.breakAtTarget();
+      }
+
+      if (gamepad.buttons[7]?.pressed) {
+        this.app.toggleBuildMenu();
+      }
+
+      if (gamepad.buttons[0]?.pressed) {
+        this.app.builder.confirmSelection();
+      }
+
+      if (gamepad.buttons[1]?.pressed) {
+        this.app.builder.cancelSelection();
+      }
+
+      renderer.cameraYaw += (gamepad.axes[2] || 0) * 0.05;
+      renderer.cameraPitch = Math.max(-1.4, Math.min(1.4, renderer.cameraPitch + (gamepad.axes[3] || 0) * 0.045));
     } else {
-      this.currentSelection.end = cell;
+      this.app.state.controllerConnected = false;
+      this.app.updateControlHints();
+    }
+
+    const forward = new THREE.Vector3(
+      Math.sin(renderer.cameraYaw) * Math.cos(renderer.cameraPitch),
+      Math.sin(renderer.cameraPitch),
+      Math.cos(renderer.cameraYaw) * Math.cos(renderer.cameraPitch)
+    ).normalize();
+
+    const right = new THREE.Vector3(Math.cos(renderer.cameraYaw), 0, -Math.sin(renderer.cameraYaw)).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const velo = new THREE.Vector3();
+    velo.addScaledVector(forward, move.z * dt * 8);
+    velo.addScaledVector(right, move.x * dt * 8);
+    velo.addScaledVector(up, move.y * dt * 8);
+    renderer.camera.position.add(velo);
+
+    if (this.keys.KeyP || this.keys.KeyE) {
+      this.app.builder.confirmSelection();
+      this.keys.KeyP = false;
+      this.keys.KeyE = false;
+    }
+
+    if (this.keys.KeyM || this.keys.KeyQ) {
+      this.app.builder.breakAtTarget();
+      this.keys.KeyM = false;
+      this.keys.KeyQ = false;
     }
   }
 
-  confirmBuild() {
-    if (!this.currentSelection) {
-      this.setSelectionFromCurrentTarget();
-      return;
-    }
+  getMoveVector() {
+    const result = { x: 0, y: 0, z: 0 };
 
-    const { start, end } = this.currentSelection;
-    this.generateShape(start, end, this.activeTool);
-    this.currentSelection = null;
-    this.clearPreview();
-  }
+    if (this.keys.KeyW) result.z += 1;
+    if (this.keys.KeyS) result.z -= 1;
+    if (this.keys.KeyA) result.x -= 1;
+    if (this.keys.KeyD) result.x += 1;
+    if (this.keys.Space) result.y += 1;
+    if (this.keys.ShiftLeft || this.keys.ShiftRight) result.y -= 1;
 
-  cancelBuild() {
-    this.currentSelection = null;
-    this.clearPreview();
-  }
-
-  generateShape(start, end, tool) {
-    const minX = Math.min(start.x, end.x), maxX = Math.max(start.x, end.x);
-    const minY = Math.min(start.y, end.y), maxY = Math.max(start.y, end.y);
-    const minZ = Math.min(start.z, end.z), maxZ = Math.max(start.z, end.z);
-
-    switch (tool) {
-      case 'block': {
-        this.placeBlockAt(end.x, end.y, end.z); 
-        break;
-      }
-      case 'wall': {
-        for (let x = minX; x <= maxX; x++) {
-          for (let y = minY; y <= maxY; y++) {
-            for (let z = minZ; z <= maxZ; z++) {
-              if (x === minX || x === maxX || z === minZ || z === maxZ || y === minY || y === maxY) {
-                this.placeBlockAt(x, y, z);
-              }
-            }
-          }
-        }
-        break;
-      }
-      case 'pillar': {
-        for (let y = minY; y <= maxY; y++) {
-          this.placeBlockAt(end.x, y, end.z);
-        }
-        break;
-      }
-      case 'diagonal': {
-        const dx = Math.abs(end.x - start.x);
-        const dz = Math.abs(end.z - start.z);
-        const steps = Math.max(dx, dz, 1);
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps;
-          const x = Math.round(start.x + (end.x - start.x) * t);
-          const z = Math.round(start.z + (end.z - start.z) * t);
-          this.placeBlockAt(x, start.y, z);
-        }
-        break;
-      }
-      case 'circle': {
-        const radius = Math.max(1, Math.max(Math.abs(end.x - start.x), Math.abs(end.z - start.z)));
-        for (let x = minX; x <= maxX; x++) {
-          for (let z = minZ; z <= maxZ; z++) {
-            const dx = x - ((minX + maxX) / 2);
-            const dz = z - ((minZ + maxZ) / 2);
-            if (dx * dx + dz * dz <= radius * radius) {
-              for (let y = minY; y <= maxY; y++) this.placeBlockAt(x, y, z);
-            }
-          }
-        }
-        break;
-      }
-      case 'stair': {
-        const height = Math.max(1, Math.abs(end.y - start.y) + 1);
-        for (let i = 0; i < height; i++) {
-          const x = start.x + i;
-          const z = start.z + i;
-          this.placeBlockAt(x, start.y + i, z);
-        }
-        break;
-      }
-      default:
-        this.placeBlockAt(end.x, end.y, end.z);
-    }
-  }
-
-  placeBlockAt(x, y, z) {
-    const key = `${x},${y},${z}`;
-    if (this.world.has(key)) return;
-
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: this.app.state.activeColor, emissive: this.app.state.activeColor, roughness: 0.8 })
-    );
-
-    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    this.app.renderer.scene.add(mesh);
-    this.world.set(key, { x, y, z, color: this.app.state.activeColor, mesh });
-  }
-
-  removeBlockAt(x, y, z) {
-    const key = `${x},${y},${z}`;
-    const block = this.world.get(key);
-    if (!block) return;
-    this.app.renderer.scene.remove(block.mesh);
-    this.world.delete(key);
-  }
-
-  breakSelected() {
-    const target = this.app.renderer.getInteractionTarget();
-    const cell = this.roundVectorToCell(target);
-    this.removeBlockAt(cell.x, cell.y, cell.z);
-  }
-
-  updateCurrentSelection() {
-    const target = this.app.renderer.getInteractionTarget();
-    const cell = this.roundVectorToCell(target);
-    if (!this.currentSelection) {
-      this.currentSelection = { start: cell, end: cell };
-    } else {
-      this.currentSelection.end = cell;
-    }
-  }
-
-  loadWorld(serializedWorld) {
-    if (!Array.isArray(serializedWorld)) return;
-    serializedWorld.forEach((block) => {
-      this.placeBlockAt(block.x, block.y, block.z);
-    });
-  }
-
-  exportWorld() {
-    return Array.from(this.world.values()).map(({ x, y, z, color }) => ({ x, y, z, color }));
+    return result;
   }
 }
-

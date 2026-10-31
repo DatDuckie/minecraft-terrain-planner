@@ -1,516 +1,216 @@
-* {
-  box-sizing: border-box;
-}
+import { TerrainRenderer } from './renderer.js';
+import { Builder } from './builder.js';
+import { Controls } from './controls.js';
+import { PaletteManager } from './palette.js';
+import { SaveSystem } from './save-system.js';
 
-:root {
-  --bg: #0a0a0a;
-  --panel: rgba(10, 10, 10, 0.92);
-  --panel-strong: rgba(16, 16, 16, 0.96);
-  --border: #262626;
-  --text: #f5f5f5;
-  --muted: #b8b8b8;
-  --red: #ff4d4d;
-  --red-soft: rgba(255, 77, 77, 0.25);
-  --blue: #58a6ff;
-  --dark: #0f1720;
-  --grid: rgba(82, 101, 118, 0.9);
-  --glow: rgba(255, 79, 79, 0.58);
-  --panel-backdrop: rgba(0, 0, 0, 0.42);
-  --shadow: rgba(0, 0, 0, 0.45);
-}
+class TerrainPlannerApp {
+  constructor() {
+    this.state = {
+      tool: 'block',
+      buildMenuOpen: true,
+      activeColor: '#ff6f61',
+      settings: {
+        blockScale: 1,
+        gridRadius: 32,
+        airPlacementDistance: 4,
+        textureSize: 16,
+        noise: false
+      },
+      palette: ['#ff6f61', '#7ad1ff', '#9be16a', '#f7d06d', '#ff9f62', '#7f76ff', '#d18cff', '#f0f0f0', '#999999', '#1fbf74'],
+      controllerConnected: false
+    };
 
-html, body {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: #050505;
-  color: var(--text);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-body {
-  display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-}
-
-button, input, select {
-  font: inherit;
-}
-
-#app {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-  background: linear-gradient(180deg, #08090a 0%, #0b0b0d 100%);
-}
-
-#viewport {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  background: #0b1015;
-}
-
-#viewport canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: #101822;
-}
-
-.top-hud {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  right: 14px;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  z-index: 30;
-  pointer-events: none;
-}
-
-.hud-panel {
-  pointer-events: auto;
-  background: rgba(10, 10, 10, 0.76);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 8px 18px var(--shadow);
-  backdrop-filter: blur(6px);
-}
-
-.hud-panel-tools {
-  min-width: 310px;
-  max-width: 420px;
-  padding: 10px 12px 12px;
-}
-
-.hud-panel-hints {
-  min-width: 220px;
-  padding: 10px 12px 12px;
-}
-
-.panel-header {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
-  opacity: 0.9;
-}
-
-.tool-selector {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(52px, 1fr));
-  gap: 8px;
-}
-
-.tool-box {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 6px 6px;
-  min-height: 72px;
-  border: 1px solid #333;
-  border-radius: 10px;
-  background: rgba(20, 20, 20, 0.9);
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
-}
-
-.tool-box:hover,
-.tool-box:focus-visible {
-  border-color: #595959;
-  outline: none;
-}
-
-.tool-box.active {
-  border-color: var(--red);
-  box-shadow: inset 0 0 0 1px rgba(255, 78, 78, 0.8), 0 0 0 1px rgba(255, 78, 78, 0.35);
-  background: rgba(50, 16, 16, 0.92);
-}
-
-.tool-art {
-  position: relative;
-  display: block;
-  width: 26px;
-  height: 26px;
-  margin-bottom: 6px;
-  opacity: 0.95;
-}
-
-.tool-art.cube {
-  background: rgba(255,255,255,0.1);
-  border: 2px solid #dfe3ea;
-  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.18);
-}
-
-.tool-art.wall {
-  border: 2px solid #dfe3ea;
-  background: linear-gradient(90deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.18) 35%, rgba(0,0,0,0.1) 35%, rgba(0,0,0,0.1) 100%);
-}
-
-.tool-art.wall::before {
-  content: "";
-  position: absolute;
-  inset: 5px 2px 5px 2px;
-  border: 2px solid #eef3ff;
-}
-
-.tool-art.pillar {
-  border-left: 2px solid #dfe3ea;
-  border-right: 2px solid #dfe3ea;
-  background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(0,0,0,0.12));
-}
-
-.tool-art.pillar::before {
-  content: "";
-  position: absolute;
-  left: 9px;
-  right: 9px;
-  top: 0;
-  bottom: 0;
-  border-left: 2px solid #dfe3ea;
-  border-right: 2px solid #dfe3ea;
-}
-
-.tool-art.diagonal {
-  background: transparent;
-}
-
-.tool-art.diagonal::before,
-.tool-art.diagonal::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 2px solid #eef3ff;
-  transform: skewY(-16deg);
-}
-
-.tool-art.diagonal::after {
-  inset: 6px 6px 6px 6px;
-}
-
-.input-hints {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.hint-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.hint-key {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 72px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.18);
-  color: white;
-  font-weight: 600;
-}
-
-.coords-panel {
-  position: absolute;
-  left: 18px;
-  bottom: 18px;
-  z-index: 25;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(9, 9, 9, 0.7);
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 0 8px 18px rgba(0,0,0,0.28);
-}
-
-#crosshair {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 20px;
-  height: 20px;
-  transform: translate(-50%, -50%);
-  z-index: 20;
-  pointer-events: none;
-}
-
-#crosshair::before,
-#crosshair::after {
-  content: "";
-  position: absolute;
-  background: rgba(255,255,255,0.86);
-  box-shadow: 0 0 6px rgba(255,255,255,0.5);
-}
-
-#crosshair::before {
-  left: 9px;
-  top: 0;
-  width: 2px;
-  height: 20px;
-}
-
-#crosshair::after {
-  left: 0;
-  top: 9px;
-  width: 20px;
-  height: 2px;
-}
-
-.build-menu {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  width: min(330px, 30vw);
-  min-width: 260px;
-  max-height: calc(100vh - 36px);
-  overflow-y: auto;
-  padding: 16px 16px 18px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: rgba(7, 7, 7, 0.88);
-  box-shadow: 0 18px 28px rgba(0,0,0,0.4);
-  z-index: 35;
-  transition: transform 180ms ease, opacity 180ms ease;
-}
-
-.build-menu:not(.open) {
-  transform: translateX(calc(100% + 28px));
-  opacity: 0;
-  pointer-events: none;
-}
-
-.menu-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.menu-header h2 {
-  font-size: 18px;
-  margin: 0;
-}
-
-.mini-button,
-.menu-button,
-.menu-tool {
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.04);
-  color: var(--text);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
-}
-
-.mini-button:focus-visible,
-.menu-button:focus-visible,
-.menu-tool:focus-visible,
-.tool-box:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.4);
-}
-
-.mini-button,
-.menu-button {
-  padding: 8px 10px;
-}
-
-.menu-button.primary {
-  background: rgba(255, 79, 79, 0.12);
-  border-color: rgba(255, 79, 79, 0.5);
-  color: #fff;
-}
-
-.menu-button.danger {
-  color: #ffb7b7;
-  border-color: rgba(255, 79, 79, 0.55);
-  background: rgba(255, 79, 79, 0.08);
-}
-
-.menu-section {
-  border-top: 1px solid rgba(255,255,255,0.06);
-  padding-top: 12px;
-  margin-top: 12px;
-}
-
-.section-label {
-  display: inline-block;
-  margin-bottom: 8px;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.menu-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(110px, 1fr));
-  gap: 8px;
-}
-
-.menu-tool {
-  padding: 9px 8px;
-  text-align: center;
-  background: rgba(255,255,255,0.02);
-}
-
-.menu-tool.active {
-  background: rgba(255, 79, 79, 0.12);
-  border-color: rgba(255, 79, 79, 0.75);
-  box-shadow: inset 0 0 0 1px rgba(255, 79, 79, 0.38);
-}
-
-.color-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-#colorPicker {
-  width: 54px;
-  height: 38px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  padding: 0;
-}
-
-.color-label {
-  font-size: 13px;
-  letter-spacing: 0.06em;
-}
-
-.palette-swatches {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(24px, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.swatch {
-  width: 100%;
-  aspect-ratio: 1;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
-}
-
-.swatch.active {
-  border-color: var(--red);
-  box-shadow: 0 0 0 1px rgba(255,79,79,0.55), inset 0 0 0 1px rgba(255,255,255,0.15);
-}
-
-.texture-editor {
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.02);
-}
-
-.texture-editor.hidden {
-  display: none;
-}
-
-.texture-grid {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.texture-grid select {
-  flex: 1;
-  min-width: 110px;
-  background: rgba(255,255,255,0.04);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 8px;
-}
-
-.texture-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.range-setting {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-  color: var(--muted);
-}
-
-.range-setting input[type='range'] {
-  width: 100%;
-  accent-color: var(--red);
-}
-
-.button-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-@media (max-width: 760px) {
-  .top-hud {
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    gap: 8px;
+    this.ui = {};
+    this.renderer = null;
+    this.builder = null;
+    this.controls = null;
+    this.palette = null;
+    this.saveSystem = null;
+    this.lastFrame = performance.now();
   }
 
-  .hud-panel-tools {
-    min-width: 0;
-    flex: 1 1 55%;
+  cacheDom() {
+    this.ui = {
+      viewport: document.getElementById('viewport'),
+      buildMenu: document.getElementById('buildMenu'),
+      toggleMenuBtn: document.getElementById('toggleMenuBtn'),
+      toolSelector: document.getElementById('toolSelector'),
+      toolList: document.getElementById('toolList'),
+      coords: document.getElementById('coords'),
+      colorPicker: document.getElementById('colorPicker'),
+      activeColorLabel: document.getElementById('activeColorLabel'),
+      paletteSwatches: document.getElementById('paletteSwatches'),
+      textureEditor: document.getElementById('textureEditor'),
+      toggleTextureEditor: document.getElementById('toggleTextureEditor'),
+      textureSize: document.getElementById('textureSize'),
+      toggleNoise: document.getElementById('toggleNoise'),
+      applyTexture: document.getElementById('applyTexture'),
+      blockScale: document.getElementById('blockScale'),
+      gridRadius: document.getElementById('gridRadius'),
+      airDistance: document.getElementById('airDistance'),
+      exportWorld: document.getElementById('exportWorld'),
+      importWorld: document.getElementById('importWorld'),
+      importFile: document.getElementById('importFile'),
+      resetWorld: document.getElementById('resetWorld'),
+      inputHints: document.getElementById('inputHints')
+    };
   }
 
-  .hud-panel-hints {
-    min-width: 0;
-    flex: 1 1 45%;
+  init() {
+    this.cacheDom();
+    this.renderer = new TerrainRenderer(this);
+    this.builder = new Builder(this);
+    this.controls = new Controls(this);
+    this.palette = new PaletteManager(this);
+    this.saveSystem = new SaveSystem(this);
+
+    this.bindEvents();
+    this.updateControlHints();
+    this.palette.syncSwatches();
+    this.palette.setColor(this.state.activeColor, true);
+    this.syncSettingsControls();
+    this.renderer.setup();
+
+    const saved = this.saveSystem.load();
+    if (saved) {
+      if (saved.settings) Object.assign(this.state.settings, saved.settings);
+      if (saved.color) this.palette.setColor(saved.color, true);
+      if (saved.world) this.builder.loadWorld(saved.world);
+      this.syncSettingsControls();
+    }
+
+    this.setTool(this.state.tool, true);
+    this.updateBuildMenuVisibility();
+    this.startLoop();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch((error) => console.warn('SW registration failed:', error));
+    }
   }
 
-  .build-menu {
-    top: 12px;
-    right: 12px;
-    width: min(300px, calc(100vw - 24px));
+  bindEvents() {
+    document.querySelectorAll('.tool-box, .menu-tool').forEach((button) => {
+      button.addEventListener('click', () => this.setTool(button.dataset.tool));
+    });
+
+    this.ui.toggleMenuBtn.addEventListener('click', () => this.toggleBuildMenu());
+    this.ui.colorPicker.addEventListener('input', (event) => this.palette.setColor(event.target.value, true));
+
+    this.ui.toggleTextureEditor.addEventListener('click', () => {
+      const hidden = this.ui.textureEditor.classList.toggle('hidden');
+      this.ui.toggleTextureEditor.textContent = hidden ? 'Texture Editor' : 'Hide Texture Editor';
+    });
+
+    this.ui.textureSize.addEventListener('change', (event) => {
+      this.state.settings.textureSize = Number(event.target.value);
+    });
+
+    this.ui.toggleNoise.addEventListener('click', () => {
+      this.state.settings.noise = !this.state.settings.noise;
+      this.ui.toggleNoise.textContent = `Noise: ${this.state.settings.noise ? 'On' : 'Off'}`;
+    });
+
+    this.ui.applyTexture.addEventListener('click', () => {
+      // texture generation is intentionally lightweight in this version
+      this.saveSystem.save();
+    });
+
+    this.ui.blockScale.addEventListener('input', (event) => {
+      this.state.settings.blockScale = Number(event.target.value);
+      this.renderer.updateBlockScale();
+    });
+
+    this.ui.gridRadius.addEventListener('input', (event) => {
+      this.state.settings.gridRadius = Number(event.target.value);
+      this.renderer.updateGridRadius(this.state.settings.gridRadius);
+    });
+
+    this.ui.airDistance.addEventListener('input', (event) => {
+      this.state.settings.airPlacementDistance = Number(event.target.value);
+    });
+
+    this.ui.exportWorld.addEventListener('click', () => this.saveSystem.exportWorld());
+    this.ui.importWorld.addEventListener('click', () => this.ui.importFile.click());
+    this.ui.importFile.addEventListener('change', (event) => this.saveSystem.importWorld(event.target.files[0]));
+    this.ui.resetWorld.addEventListener('click', () => this.saveSystem.masterReset());
+
+    window.addEventListener('keydown', (event) => this.controls.onKeyDown(event));
+    window.addEventListener('keyup', (event) => this.controls.onKeyUp(event));
+    window.addEventListener('mousemove', (event) => this.controls.onMouseMove(event));
+    window.addEventListener('mousedown', (event) => this.controls.onMouseDown(event));
+    window.addEventListener('mouseup', () => { this.controls.mouseDown = false; });
+    window.addEventListener('contextmenu', (event) => event.preventDefault());
+    window.addEventListener('resize', () => this.renderer.resize());
+    window.addEventListener('gamepadconnected', () => this.updateControlHints());
+    window.addEventListener('gamepaddisconnected', () => this.updateControlHints());
+  }
+
+  setTool(toolName, skipUi = false) {
+    this.state.tool = toolName;
+    this.builder.setTool(toolName);
+
+    if (!skipUi) {
+      document.querySelectorAll('.tool-box, .menu-tool').forEach((button) => {
+        const active = button.dataset.tool === toolName;
+        button.classList.toggle('active', active);
+      });
+    }
+  }
+
+  toggleBuildMenu(forceState) {
+    this.state.buildMenuOpen = typeof forceState === 'boolean' ? forceState : !this.state.buildMenuOpen;
+    this.updateBuildMenuVisibility();
+  }
+
+  updateBuildMenuVisibility() {
+    this.ui.buildMenu.classList.toggle('open', this.state.buildMenuOpen);
+    this.ui.toggleMenuBtn.textContent = this.state.buildMenuOpen ? 'Hide' : 'Show';
+  }
+
+  syncSettingsControls() {
+    this.ui.blockScale.value = String(this.state.settings.blockScale);
+    this.ui.gridRadius.value = String(this.state.settings.gridRadius);
+    this.ui.airDistance.value = String(this.state.settings.airPlacementDistance);
+    this.ui.textureSize.value = String(this.state.settings.textureSize);
+    this.ui.toggleNoise.textContent = `Noise: ${this.state.settings.noise ? 'On' : 'Off'}`;
+  }
+
+  updateControlHints() {
+    if (this.state.controllerConnected || navigator.getGamepads?.().some(Boolean)) {
+      this.ui.inputHints.innerHTML = `
+        <div class="hint-row"><span class="hint-key">LS</span><span>Fly</span></div>
+        <div class="hint-row"><span class="hint-key">RS</span><span>Look</span></div>
+        <div class="hint-row"><span class="hint-key">RT</span><span>Place</span></div>
+        <div class="hint-row"><span class="hint-key">LT</span><span>Break</span></div>
+      `;
+    } else {
+      this.ui.inputHints.innerHTML = `
+        <div class="hint-row"><span class="hint-key">WASD</span><span>Fly</span></div>
+        <div class="hint-row"><span class="hint-key">I/K/O/L</span><span>Look</span></div>
+        <div class="hint-row"><span class="hint-key">P / E</span><span>Place</span></div>
+        <div class="hint-row"><span class="hint-key">M / Q</span><span>Break</span></div>
+      `;
+    }
+  }
+
+  startLoop() {
+    const tick = (time) => {
+      const dt = Math.min((time - this.lastFrame) / 1000, 0.033);
+      this.lastFrame = time;
+      this.controls.update(dt);
+      this.renderer.update(dt);
+      this.builder.updatePreview();
+      requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
+  }
+
+  setCoords(x, y, z) {
+    this.ui.coords.textContent = `X:${Math.round(x)} Y:${Math.round(y)} Z:${Math.round(z)}`;
   }
 }
 
-@media (max-width: 520px) {
-  .top-hud {
-    flex-direction: column;
-  }
-
-  .hud-panel-tools,
-  .hud-panel-hints {
-    width: 100%;
-  }
-
-  .tool-selector {
-    grid-template-columns: repeat(2, minmax(80px, 1fr));
-  }
-}
-
+window.app = new TerrainPlannerApp();
+window.app.init();
