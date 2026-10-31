@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-
 export class Builder {
   constructor(app) {
     this.app = app;
@@ -28,10 +26,22 @@ export class Builder {
   }
 
   roundVectorToCell(point) {
+    if (!point || typeof point.x !== 'number') {
+      return { x: 0, y: 0, z: 0 };
+    }
+
     return {
       x: Math.floor(point.x),
       y: Math.floor(point.y),
       z: Math.floor(point.z),
+    };
+  }
+
+  cellToWorld(cell) {
+    return {
+      x: cell.x + 0.5,
+      y: cell.y + 0.5,
+      z: cell.z + 0.5,
     };
   }
 
@@ -80,23 +90,31 @@ export class Builder {
     this.clearPreview();
     const target = this.app.renderer.getInteractionTarget();
     const cell = this.roundVectorToCell(target);
+    const center = this.cellToWorld(cell);
+
     const preview = new THREE.Mesh(
-      new THREE.BoxGeometry(0.96, 0.96, 0.96),
+      new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({
         color: '#ff5a5f',
         emissive: '#3f0e18',
         transparent: true,
         opacity: 0.75,
+        wireframe: true,
       })
     );
-    preview.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
+
+    preview.position.set(center.x, center.y, center.z);
     this.previewGroup.add(preview);
     this.previewMesh = preview;
   }
 
   drawSelectionPreview() {
     this.clearPreview();
-    const { start, end } = this.selection;
+    const { start, end } = this.selection || {
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 0, y: 0, z: 0 },
+    };
+
     const minX = Math.min(start.x, end.x);
     const maxX = Math.max(start.x, end.x);
     const minY = Math.min(start.y, end.y);
@@ -104,12 +122,12 @@ export class Builder {
     const minZ = Math.min(start.z, end.z);
     const maxZ = Math.max(start.z, end.z);
 
-    const sizeX = Math.max(1, maxX - minX + 1);
-    const sizeY = Math.max(1, maxY - minY + 1);
-    const sizeZ = Math.max(1, maxZ - minZ + 1);
+    const width = Math.max(1, maxX - minX + 1);
+    const height = Math.max(1, maxY - minY + 1);
+    const depth = Math.max(1, maxZ - minZ + 1);
 
     const outline = new THREE.Mesh(
-      new THREE.BoxGeometry(sizeX, sizeY, sizeZ),
+      new THREE.BoxGeometry(width, height, depth),
       new THREE.MeshStandardMaterial({
         color: '#ff5a5f',
         wireframe: true,
@@ -118,7 +136,12 @@ export class Builder {
       })
     );
 
-    outline.position.set((minX + maxX) / 2 + 0.5, (minY + maxY) / 2 + 0.5, (minZ + maxZ) / 2 + 0.5);
+    outline.position.set(
+      minX + width / 2,
+      minY + height / 2,
+      minZ + depth / 2
+    );
+
     this.previewGroup.add(outline);
     this.previewMesh = outline;
   }
@@ -135,7 +158,13 @@ export class Builder {
   }
 
   addCell(x, y, z) {
-    const key = `${x},${y},${z}`;
+    const cell = {
+      x: Math.floor(x),
+      y: Math.floor(y),
+      z: Math.floor(z),
+    };
+
+    const key = `${cell.x},${cell.y},${cell.z}`;
     if (this.world.has(key)) return false;
 
     const color = this.app.state.activeColor || '#ff6f61';
@@ -149,16 +178,23 @@ export class Builder {
       })
     );
 
-    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    const center = this.cellToWorld(cell);
+    mesh.position.set(center.x, center.y, center.z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     this.app.renderer.scene.add(mesh);
-    this.world.set(key, { x, y, z, color, mesh });
+    this.world.set(key, { x: cell.x, y: cell.y, z: cell.z, color, mesh });
     return true;
   }
 
   removeCell(x, y, z) {
-    const key = `${x},${y},${z}`;
+    const cell = {
+      x: Math.floor(x),
+      y: Math.floor(y),
+      z: Math.floor(z),
+    };
+
+    const key = `${cell.x},${cell.y},${cell.z}`;
     const block = this.world.get(key);
     if (!block) return;
     this.app.renderer.scene.remove(block.mesh);
@@ -327,4 +363,3 @@ export class Builder {
 }
 
 export default Builder;
-
