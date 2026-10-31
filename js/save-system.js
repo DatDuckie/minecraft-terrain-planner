@@ -46,7 +46,7 @@ export function normalizeSettings(value = {}) {
     };
   }
   return {
-    blockScale: numberInRange(value.blockScale, 0.5, 2, DEFAULT_SETTINGS.blockScale),
+    blockScale: numberInRange(value.blockScale, 0.1, 10, DEFAULT_SETTINGS.blockScale),
     gridRadius: Math.round(numberInRange(value.gridRadius, 10, 100, DEFAULT_SETTINGS.gridRadius) / 5) * 5,
     airDistance: numberInRange(value.airDistance, 2, 5, DEFAULT_SETTINGS.airDistance),
     customColors,
